@@ -1,0 +1,150 @@
+# =========================================================
+# Python
+# =========================================================
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyd
+*.pyo
+
+# C extensions
+*.so
+*.dylib
+*.dll
+
+# =========================================================
+# Build / packaging
+# =========================================================
+.Python
+build/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Local package artifacts
+pip-wheel-metadata/
+*.whl
+
+# =========================================================
+# Virtual environments
+# =========================================================
+.venv/
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+
+# =========================================================
+# Jupyter / IPython
+# =========================================================
+.ipynb_checkpoints/
+profile_default/
+ipython_config.py
+
+# =========================================================
+# Testing / coverage / type checking
+# =========================================================
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.nox/
+.mypy_cache/
+.dmypy.json
+dmypy.json
+.pyre/
+.ruff_cache/
+.hypothesis/
+
+# =========================================================
+# Logs / runtime
+# =========================================================
+*.log
+logs/
+results/logs/
+
+# =========================================================
+# IDE / editor
+# =========================================================
+.vscode/
+.idea/
+*.iml
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# # =========================================================
+# # Project results and generated outputs
+# # Keep folder structure if needed, ignore contents
+# # =========================================================
+# results/figures/**
+# results/metrics/**
+# results/tables/**
+results/logs/**
+
+# # Keep the directories themselves if you want them tracked
+# !results/figures/.gitkeep
+# !results/metrics/.gitkeep
+# !results/tables/.gitkeep
+# !results/logs/.gitkeep
+
+# # =========================================================
+# # Data
+# # Usually do NOT track raw/processed battery data
+# # Adjust if you want sample data committed
+# # =========================================================
+# data/raw/**
+# data/interim/**
+# data/processed/**
+
+# # Keep folder structure if needed
+# !data/raw/.gitkeep
+# !data/interim/.gitkeep
+# !data/processed/.gitkeep
+
+# =========================================================
+# Temporary / scratch files
+# =========================================================
+tmp/
+temp/
+*.tmp
+*.bak
+*.swp
+*.swo
+
+# =========================================================
+# Notebook exports / generated reports
+# =========================================================
+*.html
+*.pdf
+
+# =========================================================
+# Environment / secrets
+# =========================================================
+.env
+.env.*
+*.env
+
+# Conda local state
+.conda/
+
+# =========================================================
+# Project-specific
+# =========================================================
+.dist/

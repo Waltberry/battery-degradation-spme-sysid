@@ -1,0 +1,18 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "battery-degradation-spme-sysid"
+version = "0.1.0"
+description = "Physics-informed SPMe system identification for battery degradation monitoring"
+authors = [
+  { name = "Onyero Walter Ofuzim" }
+]
+requires-python = ">=3.12"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
