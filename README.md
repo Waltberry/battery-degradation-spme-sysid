@@ -390,3 +390,305 @@ flowchart TD
     F --> H
     G --> H
     H --> I
+````
+
+---
+
+## Pipeline flow diagram
+
+```mermaid
+flowchart LR
+    A[Raw .mpr / csv data] --> B[Cycle detection]
+    B --> C[Signal preparation]
+    C --> D[Proxy state simulation]
+    D --> E[Stage 2: fit surrogate and R0]
+    E --> F[Stage 3a: fit A and B]
+    F --> G[Stage 3b: joint refinement]
+    G --> H[Fit metrics]
+    G --> I[Nonlinearity surfaces]
+    G --> J[Parameter extraction]
+    J --> K[Multi-cycle degradation story]
+```
+
+---
+
+## Repository structure
+
+```text
+battery-degradation-spme-sysid/
+├── data/
+│   ├── raw/
+│   ├── interim/
+│   └── processed/
+├── notebooks/
+├── results/
+│   ├── figures/
+│   ├── metrics/
+│   ├── tables/
+│   └── logs/
+├── scripts/
+├── src/
+│   └── battery_deg_spme/
+└── tests/
+```
+
+---
+
+## Package layout
+
+### `config/`
+
+Experiment defaults and runtime settings.
+
+### `io/`
+
+Data loading and result writing.
+
+### `preprocessing/`
+
+Cycle detection, unit handling, time normalization, resampling.
+
+### `models/`
+
+SPMe proxy state-space structure, parameterization, surrogate models, synthetic truth generation.
+
+### `fitting/`
+
+Stage 2, Stage 3a, Stage 3b, optimization helpers, and cycle pipeline orchestration.
+
+### `evaluation/`
+
+Fit metrics, degree comparison, transfer/generalization helpers.
+
+### `analysis/`
+
+Surface analysis, degradation story tables, parameter extraction, summaries.
+
+### `visualization/`
+
+Voltage fits, residuals, cycle plots, trend plots, and nonlinearity surfaces.
+
+---
+
+## Notebooks
+
+Notebooks are for inspection and rapid visual validation only.
+
+### `00_data_inspection.ipynb`
+
+Raw current/voltage inspection, cycle visualization, cycle length screening.
+
+### `01_single_cycle_pipeline.ipynb`
+
+Single-cycle fitting, Stage 2/3a/3b fit review, learned nonlinearity surfaces.
+
+### `02_synthetic_validation.ipynb`
+
+Synthetic truth generation, staged recovery, truth-vs-learned nonlinearity comparison.
+
+### `03_multi_cycle_generalization.ipynb`
+
+Multi-cycle fit review, RMSE trends, resistance trends, shape drift trends.
+
+### `04_nonlinearity_analysis.ipynb`
+
+Focused surface inspection and learned surrogate visualization.
+
+### `05_parameter_monitoring.ipynb`
+
+Parameter tracking and degradation interpretation.
+
+### `06_degree_selection.ipynb`
+
+Polynomial degree sweep and model complexity selection.
+
+---
+
+## Main scripts
+
+### `scripts/run_single_cycle.py`
+
+Runs the full single-cycle workflow and saves:
+
+* Stage 2 fit
+* Stage 3a fit
+* Stage 3b fit
+* residuals
+* learned nonlinearity surfaces
+* stage summary table
+
+### `scripts/run_multi_cycle.py`
+
+Runs the pipeline across cycles and saves:
+
+* per-cycle Stage 2 / 3a / 3b fits
+* RMSE vs cycle
+* (R_0) vs cycle
+* (\theta_A) vs cycle
+* (\theta_B) vs cycle
+* surrogate shape drift vs cycle
+* degradation story tables
+
+### `scripts/run_synthetic_validation.py`
+
+Runs synthetic truth generation plus staged recovery and saves:
+
+* truth vs Stage 2
+* truth vs Stage 3a
+* truth vs Stage 3b
+* truth-vs-learned surface comparison
+* parameter recovery table
+
+---
+
+## Example output plots
+
+When the scripts are run, example outputs are written under `results/figures/`, such as:
+
+* `results/figures/single_cycle/stage2_fit.png`
+* `results/figures/single_cycle/stage3b_fit.png`
+* `results/figures/single_cycle/stage3b_learned_nonlinearity_heatmap.png`
+* `results/figures/synthetic_validation/truth_vs_stage3b.png`
+* `results/figures/synthetic_validation/truth_vs_stage3b_nonlinearity_compare3d.png`
+* `results/figures/multi_cycle/r0_vs_cycle.png`
+* `results/figures/multi_cycle/shape_drift_vs_cycle.png`
+
+You can add screenshots of those into the README later once the repo is public.
+
+---
+
+## Sample dataset instructions
+
+This repository is structured so that large or private research datasets do not need to be committed.
+
+Recommended practice:
+
+1. keep your real experimental files under:
+
+   * `data/raw/`
+2. keep processed intermediates under:
+
+   * `data/interim/`
+   * `data/processed/`
+3. do not commit sensitive or large raw files unless they are explicitly public
+
+To let others test the package, provide one of the following:
+
+* a very small public example `.csv`
+* a synthetic-data-only workflow
+* a sample data description plus expected column names
+
+Required columns for the real-data loader are typically:
+
+* time column, e.g. `time/s`
+* current column, e.g. `I/mA`
+* voltage column, e.g. `Ewe/V`
+
+---
+
+## Installation
+
+Create the environment:
+
+```bash
+conda env create -f environment.yml
+conda activate battery-sysid
+```
+
+Install locally in editable mode:
+
+```bash
+pip install -e .
+```
+
+---
+
+## Running the package
+
+Single cycle:
+
+```bash
+python scripts/run_single_cycle.py
+```
+
+Synthetic validation:
+
+```bash
+python scripts/run_synthetic_validation.py
+```
+
+Multi-cycle:
+
+```bash
+python scripts/run_multi_cycle.py
+```
+
+Run tests:
+
+```bash
+pytest -q
+```
+
+Run tests with coverage:
+
+```bash
+pytest --cov=src/battery_deg_spme --cov-report=term-missing
+```
+
+---
+
+## Testing philosophy
+
+The `tests/` folder covers:
+
+* cycle detection
+* signal preparation
+* unit handling
+* resampling
+* least squares utilities
+* state-space builders
+* parameterization helpers
+* surrogate feature construction
+* metrics
+* nonlinearity analysis
+* IO helpers
+* smoke checks for package configuration
+
+The goal is to keep the package stable as the thesis code evolves.
+
+---
+
+## Thesis context
+
+This repository supports MSc research in:
+
+**Battery Degradation Monitoring using Physics-Informed System Identification**
+
+Core contributions include:
+
+* structured dynamic parameterization
+* additive nonlinear surrogate voltage modeling
+* staged identification for improved interpretability
+* multi-cycle degradation parameter tracking
+* nonlinearity surface drift as a degradation marker
+
+---
+
+## Future work
+
+Planned extensions include:
+
+* Chebyshev or orthogonal polynomial surrogates
+* Bayesian parameter estimation
+* stronger synthetic identifiability studies
+* package release to PyPI
+* automated CI with test matrix
+* documented benchmark datasets
+
+---
+
+## License
+
+Apache 2.0
+
+````
