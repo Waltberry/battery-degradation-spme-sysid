@@ -1,10 +1,3 @@
-Below is the **GitHub-render friendly README**.
-All equations that previously used `\(...\)` or `\[...\]` are converted to **GitHub-compatible LaTeX blocks** using `$$ ... $$` or inline `$...$`.
-
-You can **copy-paste this entire README directly**.
-
----
-
 # Battery Degradation SPMe System Identification
 
 Physics-informed system identification package for battery degradation monitoring using an SPMe-inspired proxy state model and staged nonlinear voltage surrogate estimation.
