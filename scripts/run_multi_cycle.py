@@ -69,9 +69,6 @@ def _should_skip_cycle(cycle_idx: int, prep: dict, min_points: int = 10) -> tupl
 
     if cycle_idx == 269:
         return True, "explicit skip: problematic empty/short cycle 269"
-    
-    if cycle_idx == 271:
-        return True, "explicit skip: last cycle, cycle 271"
 
     if n_pts < int(min_points):
         return True, f"too short after preparation: n_points={n_pts} < {min_points}"

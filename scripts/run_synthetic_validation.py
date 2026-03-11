@@ -62,7 +62,7 @@ def main():
     cfg.discharge_positive = True
 
     # Synthetic-only overrides
-    settings.surrogate.poly_deg = 4
+    settings.surrogate.poly_deg = 3
     settings.surrogate.use_ln_feature = False
 
     settings.optimization.use_lbfgs = False
@@ -83,7 +83,7 @@ def main():
     t, U, X, Y, Y_full = generate_discharge_data(
         cfg=cfg,
         I_const=2.0,
-        sim_t_end=25.0,
+        sim_t_end=250.0,
         sim_dt=0.1,
         theta_n0=0.8,
         theta_p0=0.4,
