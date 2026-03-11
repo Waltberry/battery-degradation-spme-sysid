@@ -1,3 +1,10 @@
+Below is the **GitHub-render friendly README**.
+All equations that previously used `\(...\)` or `\[...\]` are converted to **GitHub-compatible LaTeX blocks** using `$$ ... $$` or inline `$...$`.
+
+You can **copy-paste this entire README directly**.
+
+---
+
 # Battery Degradation SPMe System Identification
 
 Physics-informed system identification package for battery degradation monitoring using an SPMe-inspired proxy state model and staged nonlinear voltage surrogate estimation.
@@ -8,365 +15,334 @@ The project is organized as a Python package under `src/battery_deg_spme`, with 
 
 ---
 
-## Why this repository exists
+# Why this repository exists
 
 The central problem is this:
 
 Given measured current and voltage from a battery experiment,
 
-- input: current \( I(t) \)
-- output: terminal voltage \( V(t) \)
+* input: current $I(t)$
+* output: terminal voltage $V(t)$
 
 recover a compact internal model that is still interpretable enough to monitor degradation.
 
 Instead of fitting a purely black-box time-series model, this repository uses:
 
-- a structured SPMe-inspired state model for internal battery dynamics
-- a learned additive nonlinear voltage surrogate
-- staged system identification
-- multi-cycle monitoring of resistance and dynamic parameters
-- surface-based nonlinearity tracking across cycles
+* a structured SPMe-inspired state model for internal battery dynamics
+* a learned additive nonlinear voltage surrogate
+* staged system identification
+* multi-cycle monitoring of resistance and dynamic parameters
+* surface-based nonlinearity tracking across cycles
 
 This makes the method suitable both for system identification and for degradation interpretation.
 
 ---
 
-## Scientific goal
+# Scientific goal
 
 The objective is to estimate battery internal behavior and degradation-sensitive parameters from terminal data.
 
 The internal state is represented by an SPMe-inspired proxy:
 
-\[
+$$
 x(t) =
 \begin{bmatrix}
-c_n \\
-c_p \\
+c_n \
+c_p \
 c_e
 \end{bmatrix}
 \in \mathbb{R}^{14}
-\]
+$$
 
 with states grouped as:
 
-- negative-particle diffusion proxy states
-- positive-particle diffusion proxy states
-- electrolyte concentration proxy states
+* negative-particle diffusion proxy states
+* positive-particle diffusion proxy states
+* electrolyte concentration proxy states
 
 A key reduced view used throughout the voltage model is:
 
-\[
-x_{\text{surf}}(t) = \{x_p(t), x_n(t), c_{e,L}(t), c_{e,R}(t)\}
-\]
+$$
+x_{\text{surf}}(t) = {x_p(t), x_n(t), c_{e,L}(t), c_{e,R}(t)}
+$$
 
 where:
 
-- \(x_p\) is the positive-electrode surface stoichiometry proxy
-- \(x_n\) is the negative-electrode surface stoichiometry proxy
-- \(c_{e,L}\) and \(c_{e,R}\) are left/right electrolyte concentration proxies
+* $x_p$ is the positive-electrode surface stoichiometry proxy
+* $x_n$ is the negative-electrode surface stoichiometry proxy
+* $c_{e,L}$ and $c_{e,R}$ are left/right electrolyte concentration proxies
 
 The terminal voltage model is:
 
-\[
+$$
 V(t) = \hat{Z}(x_p, x_n, c_{e,L}, c_{e,R}) - N_s I(t) R_0 - v_{rc}(t)
-\]
+$$
 
 where:
 
-- \( \hat{Z}(\cdot) \) is the learned nonlinear surrogate
-- \( N_s \) is the number of series cells
-- \( R_0 \) is the lumped ohmic resistance
-- \( v_{rc}(t) \) is an optional transient RC contribution
+* $\hat{Z}(\cdot)$ is the learned nonlinear surrogate
+* $N_s$ is the number of series cells
+* $R_0$ is the lumped ohmic resistance
+* $v_{rc}(t)$ is an optional transient RC contribution
 
 ---
 
-## Mathematical formulation
+# Mathematical formulation
 
-### 1. Proxy dynamic model
+## 1. Proxy dynamic model
 
 The internal proxy dynamics are modeled in continuous time as
 
-\[
+$$
 \dot{x}(t) = A(\theta_A)x(t) + B(\theta_B) I(t)
-\]
+$$
 
-with:
+with
 
-- \(x(t) \in \mathbb{R}^{14}\)
-- \(A(\theta_A) \in \mathbb{R}^{14 \times 14}\)
-- \(B(\theta_B) \in \mathbb{R}^{14 \times 1}\)
+* $x(t) \in \mathbb{R}^{14}$
+* $A(\theta_A) \in \mathbb{R}^{14 \times 14}$
+* $B(\theta_B) \in \mathbb{R}^{14 \times 1}$
 
 The matrices are not arbitrary dense matrices. They are structured to preserve SPMe-inspired transport topology.
 
 The parameter vector for the dynamic matrix is:
 
-\[
+$$
 \theta_A =
 \begin{bmatrix}
 \theta_1 & \theta_2 & \theta_3 & \theta_4 & \theta_5 & \theta_6 & \theta_7
 \end{bmatrix}^\top
-\]
+$$
 
-and the input matrix parameter vector is:
+The input matrix parameter vector is:
 
-\[
+$$
 \theta_B =
 \begin{bmatrix}
 \theta_8 & \theta_9 & \theta_{10} & \theta_{11}
 \end{bmatrix}^\top
-\]
+$$
 
 The structure is:
 
-- \( \theta_1, \theta_2 \) control solid diffusion blocks
-- \( \theta_3,\dots,\theta_7 \) control electrolyte transport coupling
-- \( \theta_8,\dots,\theta_{11} \) control current injection into solid/electrolyte states
+* $\theta_1, \theta_2$ control solid diffusion blocks
+* $\theta_3,\dots,\theta_7$ control electrolyte transport coupling
+* $\theta_8,\dots,\theta_{11}$ control current injection
 
-This structure means parameter variation across cycles can still be interpreted physically, rather than treated as arbitrary neural weights.
+This allows parameter drift across cycles to remain physically interpretable.
 
 ---
 
-### 2. Structured dynamic matrix \(A(\theta_A)\)
+# Structured dynamic matrix $A(\theta_A)$
 
-The global system matrix is block diagonal in the nominal proxy formulation:
+The global system matrix is block diagonal:
 
-\[
+$$
 A(\theta_A) =
 \begin{bmatrix}
-A_n(\theta_1) & 0 & 0 \\
-0 & A_p(\theta_2) & 0 \\
+A_n(\theta_1) & 0 & 0 \
+0 & A_p(\theta_2) & 0 \
 0 & 0 & A_e(\theta_3,\dots,\theta_7)
 \end{bmatrix}
-\]
+$$
 
-The negative-electrode solid diffusion block is
+Negative electrode diffusion block:
 
-\[
+$$
 A_n(\theta_1)=
 \begin{bmatrix}
--24\theta_1 & 24\theta_1 & 0 & 0 \\
-16\theta_1 & -40\theta_1 & 24\theta_1 & 0 \\
-0 & 16\theta_1 & -40\theta_1 & 24\theta_1 \\
+-24\theta_1 & 24\theta_1 & 0 & 0 \
+16\theta_1 & -40\theta_1 & 24\theta_1 & 0 \
+0 & 16\theta_1 & -40\theta_1 & 24\theta_1 \
 0 & 0 & 16\theta_1 & -16\theta_1
 \end{bmatrix}
-\]
+$$
 
-The positive-electrode block \(A_p(\theta_2)\) has the same structure.
+The positive electrode block $A_p(\theta_2)$ has identical structure.
 
-The electrolyte block is parameterized as
+Electrolyte block:
 
-\[
+$$
 A_e(\theta_3,\dots,\theta_7)=
 \begin{bmatrix}
--4\theta_3 & 4\theta_3 & 0 & 0 & 0 & 0 \\
-4\theta_3 & -(4\theta_3+16\theta_4) & 16\theta_4 & 0 & 0 & 0 \\
-0 & 16\theta_4 & -(16\theta_4+4\theta_5) & 4\theta_5 & 0 & 0 \\
-0 & 0 & 4\theta_5 & -(4\theta_5+16\theta_6) & 16\theta_6 & 0 \\
-0 & 0 & 0 & 16\theta_6 & -(16\theta_6+4\theta_7) & 4\theta_7 \\
+-4\theta_3 & 4\theta_3 & 0 & 0 & 0 & 0 \
+4\theta_3 & -(4\theta_3+16\theta_4) & 16\theta_4 & 0 & 0 & 0 \
+0 & 16\theta_4 & -(16\theta_4+4\theta_5) & 4\theta_5 & 0 & 0 \
+0 & 0 & 4\theta_5 & -(4\theta_5+16\theta_6) & 16\theta_6 & 0 \
+0 & 0 & 0 & 16\theta_6 & -(16\theta_6+4\theta_7) & 4\theta_7 \
 0 & 0 & 0 & 0 & 4\theta_7 & -4\theta_7
 \end{bmatrix}
-\]
-
-This is important for the thesis because it shows that identification is performed over a structured physical manifold, not over unrestricted matrices.
+$$
 
 ---
 
-### 3. Structured input matrix \(B(\theta_B)\)
+# Structured input matrix $B(\theta_B)$
 
-The current input enters only physically meaningful locations:
-
-\[
+$$
 B(\theta_B) =
 \begin{bmatrix}
-0 \\
-0 \\
-0 \\
-6\theta_8 \\
-0 \\
-0 \\
-0 \\
-6\theta_9 \\
-\theta_{10} \\
-\theta_{10} \\
-0 \\
-0 \\
-\theta_{11} \\
+0 \
+0 \
+0 \
+6\theta_8 \
+0 \
+0 \
+0 \
+6\theta_9 \
+\theta_{10} \
+\theta_{10} \
+0 \
+0 \
+\theta_{11} \
 \theta_{11}
 \end{bmatrix}
-\]
+$$
 
-This preserves the interpretation of current acting through solid and electrolyte transport channels.
+This preserves the interpretation of current entering physically meaningful channels.
 
 ---
 
-### 4. Nonlinear voltage surrogate
+# Nonlinear voltage surrogate
 
-The nonlinear voltage contribution is modeled as an additive polynomial surrogate:
+The nonlinear voltage contribution is modeled as
 
-\[
+$$
 \hat{Z}(x_p, x_n, c_{e,L}, c_{e,R})
-=
+===================================
+
 c_0
-+ \sum_{k=1}^{d} a_k \tilde{x}_p^k
-+ \sum_{k=1}^{d} b_k \tilde{x}_n^k
-+ k_{\ln} \ln\left(\frac{c_{e,R}}{c_{e,L}}\right)
-\]
 
-where:
+* \sum_{k=1}^{d} a_k \tilde{x}_p^k
+* \sum_{k=1}^{d} b_k \tilde{x}_n^k
+* k_{\ln}\ln\left(\frac{c_{e,R}}{c_{e,L}}\right)
+  $$
 
-\[
-\tilde{x}_p = \frac{x_p - x_{p,\text{ref}}}{x_{p,\text{scale}}}, \qquad
-\tilde{x}_n = \frac{x_n - x_{n,\text{ref}}}{x_{n,\text{scale}}}
-\]
+where
 
-The learned surrogate parameter vector is:
+$$
+\tilde{x}*p = \frac{x_p - x*{p,\text{ref}}}{x_{p,\text{scale}}}
+$$
 
-\[
+$$
+\tilde{x}*n = \frac{x_n - x*{n,\text{ref}}}{x_{n,\text{scale}}}
+$$
+
+Parameter vector:
+
+$$
 \theta_Z =
 \begin{bmatrix}
-c_0 & a_1 & \cdots & a_d & b_1 & \cdots & b_d & k_{\ln}
+c_0 & a_1 & \dots & a_d & b_1 & \dots & b_d & k_{\ln}
 \end{bmatrix}^\top
-\]
+$$
 
-or without the log term when electrolyte coupling is disabled.
+This surrogate approximates electrochemical voltage nonlinearities:
 
-This surrogate approximates a nonlinear voltage layer that, in a more mechanistic model, would arise from:
-
-- open-circuit potential difference
-- Butler–Volmer overpotential contribution
-- electrolyte potential/logarithmic concentration correction
-
-That is why the learned surface is tracked directly in the thesis: it is not just a fit device; it is a reduced nonlinear electrochemical signature.
+* open-circuit potential
+* Butler–Volmer overpotential
+* electrolyte concentration effects
 
 ---
 
-### 5. Full output equation
+# Full output equation
 
-The modeled terminal voltage is:
-
-\[
+$$
 \hat{V}(t) = \hat{Z}(x(t)) - N_s I(t)R_0 - v_{rc}(t)
-\]
+$$
 
-When RC dynamics are disabled:
+Without RC:
 
-\[
+$$
 \hat{V}(t) = \hat{Z}(x(t)) - N_s I(t)R_0
-\]
+$$
 
-When RC dynamics are enabled, the transient is typically:
+RC dynamics:
 
-\[
-\dot{v}_{rc}(t) = -\frac{1}{\tau} v_{rc}(t) + \frac{R_1}{\tau} I(t)
-\]
-
-and the output becomes:
-
-\[
-\hat{V}(t) = \hat{Z}(x(t)) - N_s I(t)R_0 - v_{rc}(t)
-\]
+$$
+\dot{v}*{rc}(t) = -\frac{1}{\tau}v*{rc}(t) + \frac{R_1}{\tau}I(t)
+$$
 
 ---
 
-## Identification algorithm
+# Identification algorithm
 
-The identification is staged.
+## Stage 2 — surrogate identification
 
-### Stage 2 — surrogate identification
+Keep dynamics fixed
 
-Keep the proxy dynamics fixed to nominal matrices:
+$$
+A=A_{\text{nom}}, \qquad B=B_{\text{nom}}
+$$
 
-\[
-A = A_{\text{nom}}, \qquad B = B_{\text{nom}}
-\]
+Estimate
 
-Estimate:
-
-\[
-\theta_Z,\; R_0 \quad (\text{and optional RC parameters})
-\]
-
-This stage answers:
-
-Can the nonlinear voltage layer explain the measured voltage, assuming nominal internal dynamics?
-
-This is the first crucial identifiability step. It isolates the voltage nonlinearity from the dynamic model.
+$$
+\theta_Z, \quad R_0
+$$
 
 ---
 
-### Stage 3a — dynamics identification
+## Stage 3a — dynamics identification
 
-Freeze the learned surrogate from Stage 2 and estimate only:
+Estimate only
 
-\[
-\theta_A,\; \theta_B
-\]
+$$
+\theta_A, \theta_B
+$$
 
-That is:
+while keeping the surrogate fixed
 
-\[
-\dot{x}(t) = A(\theta_A)x(t) + B(\theta_B)I(t)
-\]
-
-while
-
-\[
-\hat{V}(t) = \hat{Z}_{\text{stage2}}(x(t)) - N_s I(t)R_0
-\]
-
-This stage tests whether the dynamic structure itself can be recovered once the nonlinear voltage layer is fixed.
+$$
+\hat{V}(t) = \hat{Z}_{stage2}(x(t)) - N_s I(t)R_0
+$$
 
 ---
 
-### Stage 3b — full refinement
+## Stage 3b — full refinement
 
-Unfreeze all parameters jointly:
+Unfreeze all parameters
 
-\[
-\theta_A,\; \theta_B,\; \theta_Z,\; R_0
-\]
+$$
+\theta_A,\theta_B,\theta_Z,R_0
+$$
 
-and optimize the full model end-to-end:
+Optimize
 
-\[
+$$
 \min_{\theta_A,\theta_B,\theta_Z,R_0}
 \sum_{t=1}^{T}
-\left(
-V_{\text{meas}}(t) - \hat{V}(t)
-\right)^2
-+ \lambda \mathcal{R}(\theta)
-\]
+\left(V_{\text{meas}}(t)-\hat{V}(t)\right)^2
 
-This is the final model used for reporting fit quality and degradation tracking.
-
-Stage 3b is the final stage for all reported final-cycle results.
+* \lambda \mathcal{R}(\theta)
+  $$
 
 ---
 
-## Degradation indicators tracked across cycles
+# Degradation indicators tracked across cycles
 
-For each cycle, the package can monitor:
+For each cycle the pipeline tracks
 
-- Stage 2 fit quality
-- Stage 3b fit quality
-- \(R_0\) trend across cycles
-- \(\theta_A\) trends across cycles
-- \(\theta_B\) trends across cycles
-- learned surrogate shape drift across cycles
+* Stage 2 fit quality
+* Stage 3b fit quality
+* $R_0$ trend across cycles
+* $\theta_A$ trends
+* $\theta_B$ trends
+* surrogate shape drift
 
-The shape drift is computed directly on a common \((x_n, x_p)\) grid:
+Surface drift:
 
-\[
+$$
 \Delta Z^{(k)} = Z^{(k)} - Z^{(\text{ref})}
-\]
+$$
 
-with metrics such as:
+Metric
 
-\[
-\text{RMSE}_{\text{drift}} = \sqrt{\frac{1}{N}\sum_i (\Delta Z_i)^2}
-\]
+$$
+\text{RMSE}_{drift} =
+\sqrt{\frac{1}{N}\sum_i (\Delta Z_i)^2}
+$$
 
-This is more reliable than comparing raw polynomial coefficients alone because the surface is what actually influences voltage behavior.
+Surface drift is more reliable than comparing polynomial coefficients directly.
 
 ---
 
