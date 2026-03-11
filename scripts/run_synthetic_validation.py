@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import jax
+jax.config.update("jax_enable_x64", True)
+
 from pathlib import Path
 
 import numpy as np
@@ -19,7 +22,7 @@ from battery_deg_spme.fitting.stage2 import fit_stage2_for_cycle
 from battery_deg_spme.fitting.stage3 import fit_stage3a_for_cycle, fit_stage3b_for_cycle
 from battery_deg_spme.io.result_io import save_cycle_metrics_table, save_cycle_parameter_table
 from battery_deg_spme.models.parameterization import thetaA_nom_from_cfg, thetaB_nom_from_cfg
-from battery_deg_spme.models.spme_proxy import Config, build_proxy_signals
+from battery_deg_spme.models.spme_proxy import Config, IDX, build_proxy_signals
 from battery_deg_spme.models.synthetic_truth import generate_discharge_data, truth_z_from_xn_xp
 from battery_deg_spme.visualization.fit_plots import (
     plot_residuals,
@@ -39,8 +42,8 @@ def _build_learned_surface_fn(
 
     def learned_surface_fn(xn: float, xp: float) -> float:
         x = state_template.copy()
-        x[3] = float(xn) * float(cfg.csn_max)
-        x[7] = float(xp) * float(cfg.csp_max)
+        x[IDX["cn_surf"]] = float(xn) * float(cfg.csn_max)
+        x[IDX["cp_surf"]] = float(xp) * float(cfg.csp_max)
         return float(zhat_from_thetaZ(x, thetaZ_hat))
 
     return learned_surface_fn
@@ -57,6 +60,25 @@ def main():
     cfg = Config()
     cfg.N_series = 3
     cfg.discharge_positive = True
+
+    # Synthetic-only overrides
+    settings.surrogate.poly_deg = 4
+    settings.surrogate.use_ln_feature = False
+
+    settings.optimization.use_lbfgs = False
+
+    settings.optimization.adam_epochs_stage2 = 2000
+    settings.optimization.adam_epochs_stage3a = 1800
+    settings.optimization.adam_epochs_stage3b = 2500
+
+    settings.optimization.adam_eta_stage2 = 1e-3
+    settings.optimization.adam_eta_stage3a = 5e-4
+    settings.optimization.adam_eta_stage3b = 1e-4
+
+    settings.solver.dt0_div = 50.0
+    settings.solver.solver_rtol = 1e-6
+    settings.solver.solver_atol = 1e-9
+    settings.solver.max_steps = 5_000_000
 
     t, U, X, Y, Y_full = generate_discharge_data(
         cfg=cfg,
@@ -76,6 +98,14 @@ def main():
         xp0=0.4,
         ce0_dev=0.0,
     )
+
+    print("Synthetic data shapes:")
+    print("t:", t.shape, "U:", U.shape, "X:", X.shape, "Y:", Y.shape)
+    print("Synthetic proxy ranges:")
+    print("xp range:", proxy["xp_rng"])
+    print("xn range:", proxy["xn_rng"])
+    print("ceL range:", proxy["ceL_rng"])
+    print("ceR range:", proxy["ceR_rng"])
 
     stage2 = fit_stage2_for_cycle(
         t_np=t,
@@ -250,6 +280,7 @@ def main():
 
     theta_true = np.concatenate([thetaA_nom_from_cfg(cfg), thetaB_nom_from_cfg(cfg)])
     theta_hat = np.concatenate([stage3b["thetaA_hat_stage3b"], stage3b["thetaB_hat_stage3b"]])
+
     names = [
         "thetaA_1",
         "thetaA_2",
