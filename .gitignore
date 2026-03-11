@@ -75,7 +75,6 @@ dmypy.json
 # =========================================================
 *.log
 logs/
-results/logs/
 
 # =========================================================
 # IDE / editor
@@ -103,6 +102,7 @@ results/logs/**
 !results/metrics/.gitkeep
 !results/tables/.gitkeep
 !results/logs/.gitkeep
+!results/.gitkeep
 
 # # =========================================================
 # # Data
