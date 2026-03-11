@@ -89,20 +89,20 @@ results/logs/
 Thumbs.db
 desktop.ini
 
-# # =========================================================
-# # Project results and generated outputs
-# # Keep folder structure if needed, ignore contents
-# # =========================================================
-# results/figures/**
-# results/metrics/**
-# results/tables/**
+# =========================================================
+# Project results and generated outputs
+# Keep folder structure if needed, ignore contents
+# =========================================================
+results/figures/**
+results/metrics/**
+results/tables/**
 results/logs/**
 
 # # Keep the directories themselves if you want them tracked
-# !results/figures/.gitkeep
-# !results/metrics/.gitkeep
-# !results/tables/.gitkeep
-# !results/logs/.gitkeep
+!results/figures/.gitkeep
+!results/metrics/.gitkeep
+!results/tables/.gitkeep
+!results/logs/.gitkeep
 
 # # =========================================================
 # # Data
