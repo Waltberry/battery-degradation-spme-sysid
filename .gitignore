@@ -93,14 +93,14 @@ desktop.ini
 # Keep folder structure if needed, ignore contents
 # =========================================================
 results/figures/**
-results/metrics/**
-results/tables/**
+# results/metrics/**
+# results/tables/**
 results/logs/**
 
 # # Keep the directories themselves if you want them tracked
 !results/figures/.gitkeep
-!results/metrics/.gitkeep
-!results/tables/.gitkeep
+# !results/metrics/.gitkeep
+# !results/tables/.gitkeep
 !results/logs/.gitkeep
 !results/.gitkeep
 

@@ -197,7 +197,14 @@ def run_single_cycle_pipeline(settings) -> dict[str, Any]:
     }
 
 
-def run_all_cycles_pipeline(settings) -> dict[str, Any]:
+def run_all_cycles_pipeline(
+    settings,
+    cycle_start: int | None = None,
+    cycle_end: int | None = None,
+) -> dict[str, Any]:
+    """
+    Run the multi-cycle fitting pipeline on a selected inclusive 1-based cycle window.
+    """
     _, dtype = setup_runtime(settings)
 
     loaded = _load_all_cycles_from_settings(settings)
@@ -208,12 +215,57 @@ def run_all_cycles_pipeline(settings) -> dict[str, Any]:
 
     cfg = _build_cfg_from_settings(settings)
 
+    total_available_cycles = len(cycles)
+
+    if cycle_start is None:
+        cycle_start = 1
+    if cycle_end is None:
+        cycle_end = total_available_cycles
+
+    if cycle_start < 1:
+        raise ValueError(f"cycle_start must be >= 1, got {cycle_start}")
+
+    if cycle_end < cycle_start:
+        raise ValueError(
+            f"cycle_end must be >= cycle_start, got start={cycle_start}, end={cycle_end}"
+        )
+
+    cycle_end = min(cycle_end, total_available_cycles)
+
+    selected_cycles = cycles[cycle_start - 1 : cycle_end]
+    selected_cycle_meta = cycle_meta[cycle_start - 1 : cycle_end]
+
+    if len(selected_cycles) == 0:
+        raise ValueError(
+            f"No cycles selected for cycle window {cycle_start} to {cycle_end}. "
+            f"Total available cycles: {total_available_cycles}"
+        )
+
     rows = []
     per_cycle_results = []
 
-    for cycle_idx, cycle_df in enumerate(cycles):
+    print(
+        f"[PIPELINE] Processing cycle window {cycle_start} to {cycle_end} "
+        f"(count={len(selected_cycles)}) out of total {total_available_cycles} cycles."
+    )
+
+    for local_idx, (cycle_df, meta) in enumerate(
+        zip(selected_cycles, selected_cycle_meta),
+        start=1,
+    ):
+        global_cycle_idx = cycle_start - 1 + local_idx
+
+        print(
+            f"[PIPELINE] Fitting cycle {global_cycle_idx} "
+            f"({local_idx}/{len(selected_cycles)})"
+        )
+
         try:
-            prepared = _prepare_single_cycle_bundle(cycle_df=cycle_df, settings=settings, cfg=cfg)
+            prepared = _prepare_single_cycle_bundle(
+                cycle_df=cycle_df,
+                settings=settings,
+                cfg=cfg,
+            )
             prep = prepared["prep"]
             proxy = prepared["proxy"]
 
@@ -263,7 +315,7 @@ def run_all_cycles_pipeline(settings) -> dict[str, Any]:
             final_stage_name = "stage3b" if stage3b is not None else "stage2"
 
             row = {
-                "cycle_idx": cycle_idx,
+                "cycle_idx": global_cycle_idx,
                 "n_samples": int(prep["t"].shape[0]),
                 "stage2_rmse": float(stage2["metrics"]["rmse"]),
                 "stage2_mae": float(stage2["metrics"]["mae"]),
@@ -296,8 +348,9 @@ def run_all_cycles_pipeline(settings) -> dict[str, Any]:
 
             per_cycle_results.append(
                 {
-                    "cycle_idx": cycle_idx,
+                    "cycle_idx": global_cycle_idx,
                     "cycle_df": cycle_df,
+                    "cycle_meta": meta,
                     "prep": prep,
                     "proxy": proxy,
                     "stage2": stage2,
@@ -309,21 +362,33 @@ def run_all_cycles_pipeline(settings) -> dict[str, Any]:
             )
             rows.append(row)
 
+            print(
+                f"[PIPELINE] Finished cycle {global_cycle_idx} "
+                f"({local_idx}/{len(selected_cycles)})"
+            )
+
         except Exception as exc:
             rows.append(
                 {
-                    "cycle_idx": cycle_idx,
+                    "cycle_idx": global_cycle_idx,
                     "error": str(exc),
                 }
+            )
+            print(
+                f"[PIPELINE][ERROR] Cycle {global_cycle_idx} "
+                f"({local_idx}/{len(selected_cycles)}) failed: {exc}"
             )
 
     return {
         "df": df,
-        "cycles": cycles,
-        "cycle_meta": cycle_meta,
+        "cycles": selected_cycles,
+        "cycle_meta": selected_cycle_meta,
         "cycle_summary": cycle_summary,
         "cfg": cfg,
         "rows": rows,
         "per_cycle_results": per_cycle_results,
         "final_stage_name": "stage3b",
+        "cycle_start": cycle_start,
+        "cycle_end": cycle_end,
+        "total_available_cycles": total_available_cycles,
     }

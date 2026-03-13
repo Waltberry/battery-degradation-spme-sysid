@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import math
+import os
 from pathlib import Path
 
 import matplotlib.pyplot as plt
@@ -154,7 +155,6 @@ def _plot_cycle_grid(
         else:
             raise ValueError(f"Unknown mode: {mode}")
 
-    # hide unused axes
     for idx in range(len(cycle_items), nrows * ncols):
         r = idx // ncols
         c = idx % ncols
@@ -162,7 +162,6 @@ def _plot_cycle_grid(
 
     fig.suptitle(title, fontsize=14, y=1.01)
 
-    # Put legend only on first active subplot when useful
     if mode == "fit_compare" and len(cycle_items) > 0:
         axes[0][0].legend()
 
@@ -174,7 +173,16 @@ def _plot_cycle_grid(
 # ---------------------------------------------------------------------
 def main():
     settings = get_default_settings()
-    result = run_all_cycles_pipeline(settings)
+
+    cycle_start = int(os.environ.get("CYCLE_START", "1"))
+    cycle_end_env = os.environ.get("CYCLE_END", None)
+    cycle_end = int(cycle_end_env) if cycle_end_env is not None else None
+
+    result = run_all_cycles_pipeline(
+        settings,
+        cycle_start=cycle_start,
+        cycle_end=cycle_end,
+    )
 
     fig_dir = Path("results/figures/multi_cycle")
     nonlin_dir = fig_dir / "nonlinearity"
@@ -188,18 +196,31 @@ def main():
 
     cfg = result["cfg"]
     per_cycle_results = result["per_cycle_results"]
+    cycle_start = int(result["cycle_start"])
+    cycle_end = int(result["cycle_end"])
+    total_available_cycles = int(result["total_available_cycles"])
+    window_tag = f"{cycle_start:03d}_{cycle_end:03d}"
+
+    print(
+        f"[INFO] Pipeline returned cycle window {cycle_start} to {cycle_end} "
+        f"(count={len(per_cycle_results)}) out of total {total_available_cycles} cycles"
+    )
 
     all_cycle_rows = []
     valid_cycle_items = []
     skipped_cycles = []
     reference_surface = None
 
-    for item in per_cycle_results:
+    total_cycles = len(per_cycle_results)
+
+    for idx, item in enumerate(per_cycle_results, start=1):
         cycle_idx = int(item["cycle_idx"])
         prep = item["prep"]
         stage2 = item["stage2"]
         stage3a = item["stage3a"]
         stage3b = item["stage3b"]
+
+        print(f"\n[INFO] Starting cycle {cycle_idx} ({idx}/{total_cycles})")
 
         skip_cycle, reason = _should_skip_cycle(
             cycle_idx=cycle_idx,
@@ -208,15 +229,17 @@ def main():
         )
         if skip_cycle:
             skipped_cycles.append({"cycle_idx": cycle_idx, "reason": reason})
-            print(f"[SKIP] Cycle {cycle_idx}: {reason}")
+            print(f"[SKIP] Cycle {cycle_idx} ({idx}/{total_cycles}): {reason}")
             continue
 
         final_stage = stage3b if stage3b is not None else stage2
         final_stage_name = "stage3b" if stage3b is not None else "stage2"
 
-        # --------------------------------------------------
-        # Save per-cycle stage fits
-        # --------------------------------------------------
+        print(
+            f"[INFO] Cycle {cycle_idx} ({idx}/{total_cycles}) "
+            f"using final stage: {final_stage_name}"
+        )
+
         plot_voltage(
             prep["t"],
             prep["y"],
@@ -270,9 +293,6 @@ def main():
                 show=False,
             )
 
-        # --------------------------------------------------
-        # Surface + drift
-        # --------------------------------------------------
         zhat_from_thetaZ = stage2["zhat_from_thetaZ"]
 
         if final_stage_name == "stage3b":
@@ -314,9 +334,6 @@ def main():
         else:
             drift = compute_shape_drift(reference_surface.Z, surface_result.Z)
 
-        # --------------------------------------------------
-        # Parameter monitoring
-        # --------------------------------------------------
         monitor = extract_monitorable_parameters(
             cfg=cfg,
             stage2_result=stage2,
@@ -366,58 +383,66 @@ def main():
         all_cycle_rows.append(row)
         valid_cycle_items.append(item)
 
-    # ------------------------------------------------------
-    # Tables
-    # ------------------------------------------------------
+        print(
+            f"[DONE] Finished cycle {cycle_idx} "
+            f"({idx}/{total_cycles}); valid processed so far: {len(valid_cycle_items)}"
+        )
+
     df = dicts_to_dataframe(all_cycle_rows)
 
-    save_cycle_metrics_table(df, metrics_dir / "multi_cycle_metrics.csv")
-    save_cycle_parameter_table(df, tables_dir / "multi_cycle_parameter_table.csv")
+    save_cycle_metrics_table(
+        df,
+        metrics_dir / f"multi_cycle_metrics_{window_tag}.csv",
+    )
+    save_cycle_parameter_table(
+        df,
+        tables_dir / f"multi_cycle_parameter_table_{window_tag}.csv",
+    )
 
     story_df = build_degradation_story_table(all_cycle_rows)
     save_cycle_parameter_table(
         story_df,
-        tables_dir / "multi_cycle_degradation_story_table.csv",
+        tables_dir / f"multi_cycle_degradation_story_table_{window_tag}.csv",
     )
 
     story_text = build_degradation_story_text(df)
     save_json(
         story_text,
-        tables_dir / "multi_cycle_degradation_story_text.json",
+        tables_dir / f"multi_cycle_degradation_story_text_{window_tag}.json",
     )
 
     if skipped_cycles:
-        save_json(skipped_cycles, tables_dir / "multi_cycle_skipped_cycles.json")
+        save_json(
+            skipped_cycles,
+            tables_dir / f"multi_cycle_skipped_cycles_{window_tag}.json",
+        )
 
-    # ------------------------------------------------------
-    # Combined 3-per-row grid plots
-    # ------------------------------------------------------
     _plot_cycle_grid(
         cycle_items=valid_cycle_items,
-        title="Initial measured voltage for all fitted cycles",
+        title=f"Initial measured voltage for cycles {cycle_start} to {cycle_end}",
         mode="measured_only",
         ncols=3,
-        save_path=fig_dir / "all_cycles_measured_voltage_grid.png",
+        save_path=fig_dir / f"all_cycles_measured_voltage_grid_{window_tag}.png",
         show=False,
     )
 
     _plot_cycle_grid(
         cycle_items=valid_cycle_items,
-        title="Stage 2 fits for all cycles",
+        title=f"Stage 2 fits for cycles {cycle_start} to {cycle_end}",
         mode="fit_compare",
         stage_key="stage2",
         ncols=3,
-        save_path=fig_dir / "all_cycles_stage2_fit_grid.png",
+        save_path=fig_dir / f"all_cycles_stage2_fit_grid_{window_tag}.png",
         show=False,
     )
 
     _plot_cycle_grid(
         cycle_items=valid_cycle_items,
-        title="Stage 2 residuals for all cycles",
+        title=f"Stage 2 residuals for cycles {cycle_start} to {cycle_end}",
         mode="residual",
         stage_key="stage2",
         ncols=3,
-        save_path=fig_dir / "all_cycles_stage2_residual_grid.png",
+        save_path=fig_dir / f"all_cycles_stage2_residual_grid_{window_tag}.png",
         show=False,
     )
 
@@ -425,11 +450,11 @@ def main():
     if has_stage3a:
         _plot_cycle_grid(
             cycle_items=valid_cycle_items,
-            title="Stage 3a fits for all cycles",
+            title=f"Stage 3a fits for cycles {cycle_start} to {cycle_end}",
             mode="fit_compare",
             stage_key="stage3a",
             ncols=3,
-            save_path=fig_dir / "all_cycles_stage3a_fit_grid.png",
+            save_path=fig_dir / f"all_cycles_stage3a_fit_grid_{window_tag}.png",
             show=False,
         )
 
@@ -437,33 +462,30 @@ def main():
     if has_stage3b:
         _plot_cycle_grid(
             cycle_items=valid_cycle_items,
-            title="Stage 3b fits for all cycles",
+            title=f"Stage 3b fits for cycles {cycle_start} to {cycle_end}",
             mode="fit_compare",
             stage_key="stage3b",
             ncols=3,
-            save_path=fig_dir / "all_cycles_stage3b_fit_grid.png",
+            save_path=fig_dir / f"all_cycles_stage3b_fit_grid_{window_tag}.png",
             show=False,
         )
 
         _plot_cycle_grid(
             cycle_items=valid_cycle_items,
-            title="Stage 3b residuals for all cycles",
+            title=f"Stage 3b residuals for cycles {cycle_start} to {cycle_end}",
             mode="residual",
             stage_key="stage3b",
             ncols=3,
-            save_path=fig_dir / "all_cycles_stage3b_residual_grid.png",
+            save_path=fig_dir / f"all_cycles_stage3b_residual_grid_{window_tag}.png",
             show=False,
         )
 
-    # ------------------------------------------------------
-    # Trend plots
-    # ------------------------------------------------------
     plot_metric_vs_cycle(
         df,
         metric_col="stage2_rmse",
-        title="Stage 2 RMSE vs cycle",
+        title=f"Stage 2 RMSE vs cycle ({cycle_start}-{cycle_end})",
         ylabel="RMSE [V]",
-        save_path=fig_dir / "stage2_rmse_vs_cycle.png",
+        save_path=fig_dir / f"stage2_rmse_vs_cycle_{window_tag}.png",
         show=False,
     )
 
@@ -471,9 +493,9 @@ def main():
         plot_metric_vs_cycle(
             df,
             metric_col="stage3b_rmse",
-            title="Stage 3b RMSE vs cycle",
+            title=f"Stage 3b RMSE vs cycle ({cycle_start}-{cycle_end})",
             ylabel="RMSE [V]",
-            save_path=fig_dir / "rmse_vs_cycle.png",
+            save_path=fig_dir / f"rmse_vs_cycle_{window_tag}.png",
             show=False,
         )
 
@@ -481,34 +503,36 @@ def main():
         plot_metric_vs_cycle(
             df,
             metric_col="R0_stage3b",
-            title="R0 vs cycle",
+            title=f"R0 vs cycle ({cycle_start}-{cycle_end})",
             ylabel="R0 [Ohm]",
-            save_path=fig_dir / "r0_vs_cycle.png",
+            save_path=fig_dir / f"r0_vs_cycle_{window_tag}.png",
             show=False,
         )
 
     plot_metric_vs_cycle(
         df,
         metric_col="shape_drift_rmse",
-        title="Surrogate shape drift vs cycle",
+        title=f"Surrogate shape drift vs cycle ({cycle_start}-{cycle_end})",
         ylabel="Shape drift RMSE [V]",
-        save_path=fig_dir / "shape_drift_vs_cycle.png",
+        save_path=fig_dir / f"shape_drift_vs_cycle_{window_tag}.png",
         show=False,
     )
 
     plot_thetaA_vs_cycle(
         df,
-        save_path=fig_dir / "thetaA_vs_cycle.png",
+        save_path=fig_dir / f"thetaA_vs_cycle_{window_tag}.png",
         show=False,
     )
 
     plot_thetaB_vs_cycle(
         df,
-        save_path=fig_dir / "thetaB_vs_cycle.png",
+        save_path=fig_dir / f"thetaB_vs_cycle_{window_tag}.png",
         show=False,
     )
 
-    print("Original per-cycle results:", len(per_cycle_results))
+    print("Returned per-cycle results:", len(per_cycle_results))
+    print("Cycle window:", f"{cycle_start} to {cycle_end}")
+    print("Total available cycles:", total_available_cycles)
     print("Valid processed cycles:", len(valid_cycle_items))
     print("Skipped cycles:", len(skipped_cycles))
     if skipped_cycles:
