@@ -1,0 +1,7 @@
+{
+  "R0_stage2": "Stage-2 resistance: upward trend (\u0394=0.00219227, relative=4.469%)",
+  "R0_stage3b": "Stage-3b resistance: downward trend (\u0394=-0.00157245, relative=-3.244%)",
+  "stage2_rmse": "Stage-2 fit quality: upward trend (\u0394=0.0370174, relative=1124.659%)",
+  "stage3b_rmse": "Stage-3b fit quality: upward trend (\u0394=0.0466715, relative=775.300%)",
+  "shape_drift_rmse": "Surrogate shape drift: upward trend (\u0394=1.03908e+74, relative=10390809550412006024518542803002383563019541384449963702012180496598053460226182270156800.000%)"
+}
