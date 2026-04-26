@@ -1,3 +1,5 @@
+# battery_deg_spme/fitting/stage3.py
+
 from __future__ import annotations
 
 from typing import Any

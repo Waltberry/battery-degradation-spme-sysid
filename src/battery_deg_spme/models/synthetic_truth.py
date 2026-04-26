@@ -1,3 +1,4 @@
+# src/battery_deg_spme/model/synthetic_truth
 from __future__ import annotations
 
 from typing import Any

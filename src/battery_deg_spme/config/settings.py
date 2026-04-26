@@ -1,3 +1,5 @@
+# battery_deg_spme/config/settings.py
+
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field

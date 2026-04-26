@@ -1,3 +1,4 @@
+# src/battery_deg_spme/fitting/__init__.py
 from .cycle_pipeline import run_all_cycles_pipeline, run_single_cycle_pipeline, setup_runtime
 from .least_squares import compare_ls_solvers, solve_ls_normal_eq, solve_ls_qr
 from .optimization import effective_lbfgs_epochs

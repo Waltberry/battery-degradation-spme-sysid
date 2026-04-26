@@ -1,5 +1,4 @@
-# battery_deg_spme/models/parameterization.py
-
+# battery_deg_spme/models/parameterization_synth.py
 from __future__ import annotations
 
 import jax
@@ -27,6 +26,12 @@ def raw_from_pos(val, floor=1e-12):
     return softplus_inv(val - floor)
 
 
+def _solid_scale(cfg) -> float:
+    if bool(getattr(cfg, "use_solid_stoich_rate_scale", False)):
+        return float(getattr(cfg, "solid_stoich_rate_scale", 1.0))
+    return 1.0
+
+
 def thetaA_nom_from_cfg(cfg) -> np.ndarray:
     th1 = cfg.Dn / (cfg.Rn ** 2)
     th2 = cfg.Dp / (cfg.Rp ** 2)
@@ -45,8 +50,20 @@ def thetaB_nom_from_cfg(cfg) -> np.ndarray:
     sign_n = -1.0 if cfg.discharge_positive else +1.0
     sign_p = +1.0 if cfg.discharge_positive else -1.0
 
-    th8 = sign_n * (1.0 / cfg.Rn) * (1.0 / (cfg.F * cfg.a_s_n * cfg.A * cfg.L1))
-    th9 = sign_p * (1.0 / cfg.Rp) * (1.0 / (cfg.F * cfg.a_s_p * cfg.A * cfg.L3))
+    ssolid = _solid_scale(cfg)
+
+    th8 = (
+        ssolid
+        * sign_n
+        * (1.0 / cfg.Rn)
+        * (1.0 / (cfg.F * cfg.a_s_n * cfg.A * cfg.L1))
+    )
+    th9 = (
+        ssolid
+        * sign_p
+        * (1.0 / cfg.Rp)
+        * (1.0 / (cfg.F * cfg.a_s_p * cfg.A * cfg.L3))
+    )
 
     sign_left = -1.0 if cfg.discharge_positive else +1.0
     sign_right = +1.0 if cfg.discharge_positive else -1.0
@@ -63,32 +80,32 @@ def make_builders(dtype=jnp.float64):
 
         An = jnp.array(
             [
-                [-24 * th1, 24 * th1, 0.0, 0.0],
-                [16 * th1, -40 * th1, 24 * th1, 0.0],
-                [0.0, 16 * th1, -40 * th1, 24 * th1],
-                [0.0, 0.0, 16 * th1, -16 * th1],
+                [-24.0 * th1, 24.0 * th1, 0.0, 0.0],
+                [16.0 * th1, -40.0 * th1, 24.0 * th1, 0.0],
+                [0.0, 16.0 * th1, -40.0 * th1, 24.0 * th1],
+                [0.0, 0.0, 16.0 * th1, -16.0 * th1],
             ],
             dtype=dtype,
         )
 
         Ap = jnp.array(
             [
-                [-24 * th2, 24 * th2, 0.0, 0.0],
-                [16 * th2, -40 * th2, 24 * th2, 0.0],
-                [0.0, 16 * th2, -40 * th2, 24 * th2],
-                [0.0, 0.0, 16 * th2, -16 * th2],
+                [-24.0 * th2, 24.0 * th2, 0.0, 0.0],
+                [16.0 * th2, -40.0 * th2, 24.0 * th2, 0.0],
+                [0.0, 16.0 * th2, -40.0 * th2, 24.0 * th2],
+                [0.0, 0.0, 16.0 * th2, -16.0 * th2],
             ],
             dtype=dtype,
         )
 
         Ae = jnp.array(
             [
-                [-4 * th3, 4 * th3, 0.0, 0.0, 0.0, 0.0],
-                [4 * th3, -(4 * th3 + 16 * th4), 16 * th4, 0.0, 0.0, 0.0],
-                [0.0, 16 * th4, -(16 * th4 + 4 * th5), 4 * th5, 0.0, 0.0],
-                [0.0, 0.0, 4 * th5, -(4 * th5 + 16 * th6), 16 * th6, 0.0],
-                [0.0, 0.0, 0.0, 16 * th6, -(16 * th6 + 4 * th7), 4 * th7],
-                [0.0, 0.0, 0.0, 0.0, 4 * th7, -4 * th7],
+                [-4.0 * th3, 4.0 * th3, 0.0, 0.0, 0.0, 0.0],
+                [4.0 * th3, -(4.0 * th3 + 16.0 * th4), 16.0 * th4, 0.0, 0.0, 0.0],
+                [0.0, 16.0 * th4, -(16.0 * th4 + 4.0 * th5), 4.0 * th5, 0.0, 0.0],
+                [0.0, 0.0, 4.0 * th5, -(4.0 * th5 + 16.0 * th6), 16.0 * th6, 0.0],
+                [0.0, 0.0, 0.0, 16.0 * th6, -(16.0 * th6 + 4.0 * th7), 4.0 * th7],
+                [0.0, 0.0, 0.0, 0.0, 4.0 * th7, -4.0 * th7],
             ],
             dtype=dtype,
         )
@@ -102,6 +119,7 @@ def make_builders(dtype=jnp.float64):
     @jax.jit
     def build_B_from_thetaB(thetaB: jnp.ndarray) -> jnp.ndarray:
         th8, th9, th10, th11 = thetaB
+
         B = jnp.zeros((14, 1), dtype=dtype)
         B = B.at[3, 0].set(6.0 * th8)
         B = B.at[7, 0].set(6.0 * th9)

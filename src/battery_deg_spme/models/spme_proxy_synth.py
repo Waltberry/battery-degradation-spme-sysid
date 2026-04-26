@@ -1,5 +1,4 @@
-# battery_deg_spme/models/spme_proxy.py
-
+# battery_deg_spme/models/spme_proxy_synth.py
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -83,15 +82,35 @@ class Config:
     bv_scale: float = 0.7
     N_series: int = 1
 
+    # -----------------------------------------------------
+    # SYNTHETIC-ONLY additions
+    # These must mirror the notebook truth generator when
+    # USE_SOLID_STOICH_RATE_SCALE = True.
+    # -----------------------------------------------------
+    use_solid_stoich_rate_scale: bool = False
+    solid_stoich_rate_scale: float = 1.0
+
+
+def _solid_scale(cfg: Config) -> float:
+    if bool(getattr(cfg, "use_solid_stoich_rate_scale", False)):
+        return float(getattr(cfg, "solid_stoich_rate_scale", 1.0))
+    return 1.0
+
 
 def assemble_system(cfg: Config):
     An = build_An(cfg)
     Ap = build_Ap(cfg)
     Ae = build_Ae(cfg)
 
-    Bn = build_Bn(cfg)
-    Bp = build_Bp(cfg)
-    Be = build_Be(cfg)
+    Bn = build_Bn(cfg).astype(np.float64, copy=True)
+    Bp = build_Bp(cfg).astype(np.float64, copy=True)
+    Be = build_Be(cfg).astype(np.float64, copy=True)
+
+    ssolid = _solid_scale(cfg)
+
+    # Only solid-state input channels get the synthetic scaling.
+    Bn *= ssolid
+    Bp *= ssolid
 
     Aglob = block_diag(An, Ap, Ae)
     Bglob = np.vstack([Bn, Bp, Be])
@@ -105,7 +124,12 @@ def assemble_system(cfg: Config):
     return S, Aglob, Bglob
 
 
-def make_x0(cfg: Config, theta_n0: float = 0.60, theta_p0: float = 0.60, ce0: float = 0.0):
+def make_x0(
+    cfg: Config,
+    theta_n0: float = 0.60,
+    theta_p0: float = 0.60,
+    ce0: float = 0.0,
+):
     x0 = np.zeros(14, dtype=np.float64)
     x0[IDX["cn"]] = float(theta_n0) * cfg.csn_max
     x0[IDX["cp"]] = float(theta_p0) * cfg.csp_max
@@ -121,11 +145,22 @@ def build_proxy_signals(
     xp0: float = 0.60,
     ce0_dev: float = 0.0,
 ) -> dict[str, Any]:
+    t_np = np.asarray(t_np, dtype=np.float64).reshape(-1)
+    u_np = np.asarray(u_np, dtype=np.float64)
+    if u_np.ndim == 1:
+        u_np = u_np.reshape(-1, 1)
+
+    if len(t_np) != len(u_np):
+        raise ValueError(
+            f"Length mismatch in build_proxy_signals: len(t_np)={len(t_np)} "
+            f"but len(u_np)={len(u_np)}"
+        )
+
     Sx, A_nom_np, B_nom_np = assemble_system(cfg)
     x0_nom = make_x0(cfg, theta_n0=xn0, theta_p0=xp0, ce0=ce0_dev)
 
     resp = ct.forced_response(Sx, T=t_np, U=u_np[:, 0], X0=x0_nom)
-    X_proxy = np.asarray(resp.states).T
+    X_proxy = np.asarray(resp.states, dtype=np.float64).T
 
     xp_sig = (X_proxy[:, IDX["cp_surf"]] / cfg.csp_max).astype(np.float64)
     xn_sig = (X_proxy[:, IDX["cn_surf"]] / cfg.csn_max).astype(np.float64)
@@ -140,7 +175,14 @@ def build_proxy_signals(
         ceL_sig = ceL_raw_sig
         ceR_sig = ceR_raw_sig
 
-    ln_ce_ratio_sig = np.log(np.maximum(ceR_sig / np.maximum(ceL_sig, 1e-12), 1e-12))
+    if str(cfg.ln_orientation).lower() == "left_over_right":
+        ln_ce_ratio_sig = np.log(
+            np.maximum(ceL_sig / np.maximum(ceR_sig, 1e-12), 1e-12)
+        )
+    else:
+        ln_ce_ratio_sig = np.log(
+            np.maximum(ceR_sig / np.maximum(ceL_sig, 1e-12), 1e-12)
+        )
 
     return {
         "Sx": Sx,
@@ -153,8 +195,8 @@ def build_proxy_signals(
         "ceL_sig": ceL_sig,
         "ceR_sig": ceR_sig,
         "ln_ce_ratio_sig": ln_ce_ratio_sig,
-        "xp_rng": float(xp_sig.max() - xp_sig.min()),
-        "xn_rng": float(xn_sig.max() - xn_sig.min()),
-        "ceL_rng": float(ceL_sig.max() - ceL_sig.min()),
-        "ceR_rng": float(ceR_sig.max() - ceR_sig.min()),
+        "xp_rng": float(xp_sig.max() - xp_sig.min()) if xp_sig.size else 0.0,
+        "xn_rng": float(xn_sig.max() - xn_sig.min()) if xn_sig.size else 0.0,
+        "ceL_rng": float(ceL_sig.max() - ceL_sig.min()) if ceL_sig.size else 0.0,
+        "ceR_rng": float(ceR_sig.max() - ceR_sig.min()) if ceR_sig.size else 0.0,
     }

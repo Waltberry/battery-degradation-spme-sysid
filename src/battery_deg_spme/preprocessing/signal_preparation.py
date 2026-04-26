@@ -1,3 +1,5 @@
+# battery_deg_spme/preprocessing/signal_preparation.py
+
 from __future__ import annotations
 
 from typing import Any
