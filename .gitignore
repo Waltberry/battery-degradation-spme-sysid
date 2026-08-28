@@ -183,3 +183,22 @@ slurm-*.out
 *.pem
 id_rsa
 id_ed25519
+
+# =========================================================
+# Local scratch notebooks and generated notebook data
+# =========================================================
+notebooks/Newlinear*.ipynb
+notebooks/nonlinear_synthetic_validation_thesis_clean.ipynb
+notebooks/partial_stage2_sweep_results.csv
+notebooks/partial_stage2_sweep_rows.pkl
+notebooks/raw_discharge_data_cycle_axis.csv
+
+# Combined run logs / local review text
+real10_*_all_outputs.txt
+s7_warm_all_*logs*.txt
+s7_warm_all_err_logs_combined.txt
+s7_warm_all_out_logs_combined.txt
+
+# Backup source copies
+*.bak_*
+*.bak*
