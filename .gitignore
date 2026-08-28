@@ -148,3 +148,38 @@ temp/
 # Project-specific
 # =========================================================
 .dist/
+# =========================================================
+# Extra heavy outputs from thesis reruns
+# =========================================================
+results/**
+figures/**
+notebooks/results/**
+outputs/**
+runs/**
+checkpoints/**
+
+# Keep folder placeholders if present
+!results/.gitkeep
+!figures/.gitkeep
+
+# Cluster output files
+*.out
+*.err
+slurm-*.out
+
+# Large arrays / binary scientific data
+*.npz
+*.npy
+*.pkl
+*.pickle
+*.h5
+*.hdf5
+*.mat
+*.mpr
+*.csv.gz
+
+# SSH/private key safety
+*.key
+*.pem
+id_rsa
+id_ed25519

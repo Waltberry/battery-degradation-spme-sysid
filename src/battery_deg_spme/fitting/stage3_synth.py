@@ -49,6 +49,74 @@ def _stage_lbfgs_epochs(settings, stage_name: str) -> int:
 
     return effective_lbfgs_epochs(use_lbfgs, stage_epochs)
 
+def _assemble_stage_dynamics_from_raw(
+    rawA: np.ndarray,
+    rawB: np.ndarray,
+    build_A_from_thetaA,
+    build_B_from_thetaB,
+    *,
+    clip_raw_a: float,
+    clip_raw_b: float,
+    dtype=jnp.float64,
+) -> dict[str, np.ndarray]:
+    """
+    Reconstruct the assembled continuous-time dynamic matrices from
+    Stage 3 raw dynamic parameters.
+
+    This is required for pole recovery.
+
+    Stage 3 internally parameterizes the linear dynamic block using:
+        rawA -> thetaA = exp(rawA)
+        rawB -> thetaB = rawB
+
+    The actual continuous-time poles are not eigenvalues of rawA.
+    They are eigenvalues of the assembled matrix:
+
+        A_hat = build_A_from_thetaA(thetaA_hat)
+
+    Returns
+    -------
+    dict
+        Contains raw vectors, positive/physical theta vectors,
+        assembled A/B matrices, and continuous-time poles.
+    """
+    rawA_np = np.asarray(rawA, dtype=np.float64).reshape(-1)
+    rawB_np = np.asarray(rawB, dtype=np.float64).reshape(-1)
+
+    rawA_np = np.clip(rawA_np, -float(clip_raw_a), float(clip_raw_a))
+    rawB_np = np.clip(rawB_np, -float(clip_raw_b), float(clip_raw_b))
+
+    thetaA_np = np.exp(rawA_np).astype(np.float64)
+    thetaB_np = rawB_np.astype(np.float64)
+
+    thetaA_jax = jnp.array(thetaA_np, dtype=dtype)
+    thetaB_jax = jnp.array(thetaB_np, dtype=dtype)
+
+    A_hat = np.asarray(build_A_from_thetaA(thetaA_jax), dtype=np.float64)
+    B_hat = np.asarray(build_B_from_thetaB(thetaB_jax), dtype=np.float64)
+
+    if A_hat.ndim != 2 or A_hat.shape[0] != A_hat.shape[1]:
+        raise ValueError(
+            f"Reconstructed A_hat is not square. Got shape {A_hat.shape}."
+        )
+
+    if not np.all(np.isfinite(A_hat)):
+        raise ValueError("Reconstructed A_hat contains non-finite values.")
+
+    if not np.all(np.isfinite(B_hat)):
+        raise ValueError("Reconstructed B_hat contains non-finite values.")
+
+    poles_ct = np.linalg.eigvals(A_hat)
+
+    return {
+        "rawA_clipped": rawA_np,
+        "rawB_clipped": rawB_np,
+        "thetaA_hat": thetaA_np,
+        "thetaB_hat": thetaB_np,
+        "A_hat": A_hat,
+        "B_hat": B_hat,
+        "poles_ct": poles_ct,
+    }
 
 def _build_stage3_bounds(
     cfg,
@@ -402,6 +470,26 @@ def fit_stage3a_for_cycle_synth(
     thetaA_hat_stage3a = np.exp(rawA_hat_stage3a)
     thetaB_hat_stage3a = rawB_hat_stage3a.copy()
 
+    dyn_hat_stage3a = _assemble_stage_dynamics_from_raw(
+        rawA=rawA_hat_stage3a,
+        rawB=rawB_hat_stage3a,
+        build_A_from_thetaA=build_A_from_thetaA,
+        build_B_from_thetaB=build_B_from_thetaB,
+        clip_raw_a=clip_raw_a,
+        clip_raw_b=clip_raw_b,
+        dtype=dtype,
+    )
+
+    A_hat_stage3a = dyn_hat_stage3a["A_hat"]
+    B_hat_stage3a = dyn_hat_stage3a["B_hat"]
+    poles_ct_stage3a = dyn_hat_stage3a["poles_ct"]
+
+    print("[INFO] Stage 3a assembled A_hat_stage3a shape:", A_hat_stage3a.shape)
+    print("[INFO] Stage 3a estimated CT poles from eig(A_hat_stage3a):")
+    print(poles_ct_stage3a)
+
+    # return {
+    #     "model": model_stage3a,
     return {
         "model": model_stage3a,
         "yhat": np.asarray(Yhat_stage3a, dtype=np.float64),
@@ -415,6 +503,11 @@ def fit_stage3a_for_cycle_synth(
         "rawB_hat_stage3a": rawB_hat_stage3a,
         "thetaA_hat_stage3a": thetaA_hat_stage3a,
         "thetaB_hat_stage3a": thetaB_hat_stage3a,
+        "A_hat_stage3a": A_hat_stage3a,
+        "B_hat_stage3a": B_hat_stage3a,
+        "poles_ct_stage3a": poles_ct_stage3a,
+        "A_hat_stage3a_source": "reconstructed_from_rawA_rawB_inside_fit_stage3a_for_cycle_synth",
+        "poles_ct_stage3a_source": "eig(A_hat_stage3a)",
     }
 
 
@@ -437,7 +530,15 @@ def fit_stage3b_for_cycle_synth(
     - it can initialize from nominal / Stage 2 dynamics if Stage 3a is rejected;
     - it anchors the learned static voltage surface at the initial state;
     - it clips the initial parameter vector inside optimizer bounds;
-    - it uses the Stage 3b LBFGS budget from settings instead of hard-coding zero.
+    - it uses the Stage 3b LBFGS budget from settings instead of hard-coding zero;
+    - it reconstructs and returns the assembled continuous-time A_hat/B_hat
+      matrices so Stage 3b poles can be computed correctly.
+
+    Important pole interpretation:
+    - rawA_hat_stage3b is NOT the pole vector.
+    - thetaA_hat_stage3b = exp(rawA_hat_stage3b).
+    - A_hat_stage3b = build_A_from_thetaA(thetaA_hat_stage3b).
+    - Stage 3b poles are eig(A_hat_stage3b).
     """
     t_np = np.asarray(t_np, dtype=np.float64).reshape(-1)
     u_np = np.asarray(u_np, dtype=np.float64)
@@ -472,6 +573,7 @@ def fit_stage3b_for_cycle_synth(
             dtype=np.float64,
         ).reshape(-1)
 
+        init_source = "stage3a"
         print("Stage 3b init source: Stage 3a")
 
     else:
@@ -481,6 +583,7 @@ def fit_stage3b_for_cycle_synth(
         rawA_init = np.log(np.maximum(thetaA_nom_init, 1e-12)).astype(np.float64)
         rawB_init = thetaB_nom_init.astype(np.float64)
 
+        init_source = "nominal_stage2"
         print("Stage 3b init source: nominal / Stage 2 dynamics")
 
     build_A_from_thetaA, build_B_from_thetaB = make_builders(dtype=dtype)
@@ -661,14 +764,41 @@ def fit_stage3b_for_cycle_synth(
         name="Stage 3b synth",
     )
 
+    # ---------------------------------------------------------
+    # Extract fitted Stage 3b parameters
+    # ---------------------------------------------------------
     raw_hat_full = np.asarray(model_stage3b.params[0], dtype=np.float64).reshape(-1)
 
-    rawA_hat = raw_hat_full[0:7]
-    rawB_hat = raw_hat_full[7:11]
-    thetaZ_hat = raw_hat_full[11:11 + n_thetaZ]
+    rawA_hat = raw_hat_full[0:7].copy()
+    rawB_hat = raw_hat_full[7:11].copy()
+    thetaZ_hat = raw_hat_full[11:11 + n_thetaZ].copy()
     rawR0_hat = float(raw_hat_full[11 + n_thetaZ])
 
     R0_hat = float(np.asarray(pos(jnp.array(rawR0_hat, dtype=dtype), 1e-12)))
+
+    # ---------------------------------------------------------
+    # NEW: reconstruct assembled Stage 3b A/B and poles
+    # ---------------------------------------------------------
+    dyn_hat = _assemble_stage_dynamics_from_raw(
+        rawA=rawA_hat,
+        rawB=rawB_hat,
+        build_A_from_thetaA=build_A_from_thetaA,
+        build_B_from_thetaB=build_B_from_thetaB,
+        clip_raw_a=clip_raw_a,
+        clip_raw_b=clip_raw_b,
+        dtype=dtype,
+    )
+
+    thetaA_hat = dyn_hat["thetaA_hat"]
+    thetaB_hat = dyn_hat["thetaB_hat"]
+    A_hat_stage3b = dyn_hat["A_hat"]
+    B_hat_stage3b = dyn_hat["B_hat"]
+    poles_ct_stage3b = dyn_hat["poles_ct"]
+
+    print("[INFO] Stage 3b assembled A_hat_stage3b shape:", A_hat_stage3b.shape)
+    print("[INFO] Stage 3b assembled B_hat_stage3b shape:", B_hat_stage3b.shape)
+    print("[INFO] Stage 3b estimated CT poles from eig(A_hat_stage3b):")
+    print(poles_ct_stage3b)
 
     return {
         "model": model_stage3b,
@@ -678,11 +808,27 @@ def fit_stage3b_for_cycle_synth(
         "postfit": postfit,
         "err_summary": metrics,
         "metrics": metrics,
+
+        # Raw fitted Stage 3b vector
         "raw_full_hat_stage3b": raw_hat_full,
         "rawA_hat_stage3b": rawA_hat,
         "rawB_hat_stage3b": rawB_hat,
         "thetaZ_hat": thetaZ_hat,
         "rawR0_hat": rawR0_hat,
         "R0_hat": R0_hat,
-        "init_source": "stage3a" if stage3a_result is not None else "nominal_stage2",
+
+        # Reconstructed physical/dynamic parameters
+        "thetaA_hat_stage3b": thetaA_hat,
+        "thetaB_hat_stage3b": thetaB_hat,
+
+        # Assembled continuous-time linear block
+        "A_hat_stage3b": A_hat_stage3b,
+        "B_hat_stage3b": B_hat_stage3b,
+
+        # Estimated continuous-time poles
+        "poles_ct_stage3b": poles_ct_stage3b,
+        "A_hat_stage3b_source": "reconstructed_from_rawA_rawB_inside_fit_stage3b_for_cycle_synth",
+        "poles_ct_stage3b_source": "eig(A_hat_stage3b)",
+
+        "init_source": init_source,
     }
